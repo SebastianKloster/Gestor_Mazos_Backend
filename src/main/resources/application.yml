@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: mtg-deck-manager
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  mvc:
+    problemdetails:
+      enabled: true
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: never
+    include-stacktrace: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+scryfall:
+  base-url: ${SCRYFALL_BASE_URL:https://api.scryfall.com}
+  user-agent: ${SCRYFALL_USER_AGENT:MTGDeckManager/0.0.1}
+  cache-ttl: ${SCRYFALL_CACHE_TTL:PT15M}
