@@ -5,17 +5,16 @@ Paquete raíz: `com.mtgdeckmanager`.
 
 Los módulos son `catalog`, `inventory`, `deck` y `valuation`,
 organizados internamente en `api`, `application`, `domain` e `infrastructure`.
-El módulo `catalog` ya está implementado. Solo se crean paquetes cuando contienen código. `configuration` y `common.error`
+Los módulos `catalog` e `inventory` ya están implementados. Solo se crean paquetes cuando contienen código. `configuration` y `common.error`
 contienen la infraestructura compartida.
 
 Controladores delgados, DTOs separados de entidades JPA, transacciones en servicios.
 Original se deriva de copias activas y Diferencias se calcula; no tendrán tablas.
 Fantasía no reserva ni mueve copias. Las proxies cuentan como poseídas y valen cero.
-No se implementan frontend, autenticación ni operaciones de inventario en esta etapa.
+No se implementan frontend, autenticación ni mazos en esta etapa.
 
 ## Decisiones para siguientes etapas
 
-- Etapa 3: inventario, ubicaciones no DECK, movimientos auditados y concurrencia.
 - Etapa 4: creación atómica de Deck y Location DECK, archivado con destino explícito.
 - Pruebas en cada etapa; no posponer concurrencia ni auditoría al final.
 - Copias y entradas usarán versiones esperadas para detectar solicitudes obsoletas.
@@ -52,3 +51,19 @@ paginación pública de tamaño 1–100. No se sigue next_page a destinos arbitr
 Detalles importados se leen localmente; búsquedas usan un TTL de 15 minutos.
 Los límites del proveedor se respetan con peticiones seriales a máximo 8/segundo,
 timeouts y pausa tras 429; no hay reintentos automáticos.
+
+## Inventario implementado
+
+`InventoryService` es el límite transaccional de altas, transferencias, flags y
+archivado. `CardCopy.version` usa bloqueo optimista; las operaciones de cambio
+requieren la versión esperada y hacen flush antes de construir la respuesta.
+El movimiento se registra en la misma transacción, incluso si falla después
+el registro de auditoría: el cambio físico se revierte. No hay cascadas de borrado.
+
+`LocationService` administra BINDER/BOX/OTHER. DECK se reserva para creación
+atómica con un mazo en etapa 4; no hay endpoints que generen DECK huérfanos.
+`InventoryReader` pagina copias con un entity graph de relaciones many-to-one,
+y agrega disponibilidad en lote con una consulta agrupada por carta/ubicación.
+Las copias archivadas conservan la ubicación histórica, excluida de las lecturas
+activas. `V2__create_inventory.sql` agrega locations, card_copies y card_movements
+con claves foráneas, controles de valores e índices para lecturas activas.

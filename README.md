@@ -1,7 +1,7 @@
 # MTG Deck Manager — Backend
 
-Etapa 2: infraestructura Spring Boot y catálogo Scryfall. Aún no incluye
-inventario, mazos, Fantasía ni diferencias. Diseño: [docs/architecture.md](docs/architecture.md).
+Etapa 3: infraestructura, catálogo Scryfall e inventario físico.
+Aún no incluye mazos, Fantasía, diferencias ni valoraciones. Diseño: [docs/architecture.md](docs/architecture.md).
 
 ## Requisitos
 
@@ -37,11 +37,12 @@ Para una base externa, exportar `DB_URL`, `DB_USERNAME` y `DB_PASSWORD` y ejecut
 ./mvnw verify
 ```
 
-Surefire ejecuta tests de errores y Failsafe los `*IT` contra MySQL 8.4.8 con
+Surefire ejecuta tests unitarios y Failsafe los `*IT` contra MySQL 8.4.8 con
 Testcontainers. Docker es obligatorio: la integración no se omite si falta.
 No se usa H2 como sustituto de MySQL. Testcontainers usa una base desechable y
 no necesita `.env`. El JAR queda en `target/mtg-deck-manager-0.0.1-SNAPSHOT.jar`.
-Flyway aplica `V1__create_catalog.sql` y se comprueba su repetibilidad.
+Flyway aplica `V1__create_catalog.sql` y `V2__create_inventory.sql`, con validación
+del esquema y comprobación de repetibilidad.
 Las pruebas del catálogo usan un servidor HTTP controlado y MySQL real; no
 dependen de la disponibilidad ni de los precios actuales de Scryfall.
 
@@ -103,3 +104,65 @@ Configuración opcional: `SCRYFALL_USER_AGENT` (nombre identificable de la app),
 `api.scryfall.com` y documentación en `scryfall.com`. Las imágenes son URLs de
 Scryfall para una futura interfaz. Antes de publicar, revisar sus condiciones
 sobre API, datos e imágenes: https://scryfall.com/docs/api.
+
+## Colección física (etapa 3)
+
+- `GET /api/locations?page=0&size=20`: ubicaciones paginadas, ordenadas por ID.
+- `POST /api/locations`: `{ "name": "Carpeta", "type": "BINDER" }`.
+- `PATCH /api/locations/{id}`: nombre y/o tipo; campos omitidos se conservan.
+- `GET /api/inventory/copies?cardId=...&locationId=...&page=0&size=20`:
+  copias activas con carta, impresión, imágenes, ubicación, flags y versión.
+- `POST /api/inventory/copies`: alta atómica de 1–100 copias individuales.
+- `POST /api/inventory/copies/{id}/move`: traslado atómico.
+- `PATCH /api/inventory/copies/{id}`: modificar `isProxy` y/o `isFoil`.
+- `POST /api/inventory/copies/{id}/archive`: baja explícita de la colección.
+- `GET /api/inventory/availability?cardIds=1,2`: resumen en lote por carta lógica.
+
+Primero buscar/importar un print mediante el catálogo; después registrar copias
+con su ID interno. Ejemplo de alta:
+
+```json
+{
+  "printingId": 1,
+  "locationId": 1,
+  "quantity": 2,
+  "isProxy": true,
+  "isFoil": false
+}
+```
+
+Cada fila representa una copia, incluso para impresiones idénticas. Flags
+omitidos al adquirir son false. En PATCH, flags omitidos o null se conservan.
+Una copia auténtica puede ser foil aunque el proveedor no informe ese acabado:
+los acabados de Scryfall son informativos y también se admiten proxies.
+
+Mover requiere `{ "toLocationId": 2, "expectedVersion": 0 }`; archivar requiere
+`{ "expectedVersion": 0 }`. PATCH de flags también requiere `expectedVersion`.
+Usar la versión devuelta por la última lectura; una versión obsoleta devuelve
+409 y no deja cambios ni movimientos parciales. Una transferencia al mismo
+lugar y zona es un no-op sin auditoría adicional, pero valida la versión.
+
+Ubicaciones públicas: BINDER, BOX y OTHER. Crear o convertir a DECK devuelve
+422 hasta que el módulo de mazos pueda crear ambos registros juntos (etapa 4).
+En ubicaciones no DECK, `deckZone`/`toZone` deben omitirse o ser null.
+El dominio ya contempla MAIN/COMMANDER para la siguiente etapa.
+No hay borrado físico de ubicaciones ni copias mediante esta API.
+
+La baja conserva la última ubicación y no borra el registro físico ni los
+movimientos. Una copia archivada no puede moverse ni editarse. Las transferencias
+cambian ubicación, nunca impresión o flags. Las altas, traslados y bajas registran
+ACQUIRED, TRANSFERRED y REMOVED_FROM_COLLECTION en la misma transacción.
+Editar flags no es un movimiento físico. Consulta de historial y valoración
+se incorporarán en su etapa; aquí solo se garantiza el registro de movimientos.
+
+Disponibilidad: máximo 100 IDs conocidos por solicitud, repetidos se deduplican;
+un ID inexistente devuelve 404. Incluye cantidades poseídas, auténticas, proxies,
+libres y ubicadas en mazos, más el desglose por ubicación. Prints y proxies de
+una misma carta cuentan juntos; una carta conocida sin copias devuelve cero.
+El resumen no contiene una lista parcial de copias: pedir el detalle paginado
+con los filtros cardId/locationId. La paginación usa tamaños 1–100 y páginas
+basadas en cero. Todos los listados activos excluyen copias archivadas.
+
+Pruebas de inventario: MySQL real, límites/zonas, rollback ante falla de auditoría,
+versiones obsoletas, dos transferencias HTTP concurrentes, archivado, flags y
+agregación de proxies e impresiones sin consultas por copia en los listados.

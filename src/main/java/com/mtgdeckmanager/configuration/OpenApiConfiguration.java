@@ -10,6 +10,6 @@ public class OpenApiConfiguration {
     @Bean
     OpenAPI mtgDeckManagerOpenApi() {
         return new OpenAPI().info(new Info().title("MTG Deck Manager API")
-                .version("v1").description("Backend monousuario. Etapa 2: catálogo de cartas e impresiones en inglés."));
+                .version("v1").description("Backend monousuario. Etapa 3: catálogo e inventario de copias físicas."));
     }
 }

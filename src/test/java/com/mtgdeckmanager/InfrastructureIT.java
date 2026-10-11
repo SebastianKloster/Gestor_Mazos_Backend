@@ -29,7 +29,7 @@ class InfrastructureIT {
     @Test
     void mysqlAndFlywayAreReadyAndRepeatable() {
         assertThat(jdbc.queryForObject("SELECT 1", Integer.class)).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history", Integer.class)).isEqualTo(2);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
